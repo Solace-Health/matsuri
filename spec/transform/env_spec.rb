@@ -28,6 +28,22 @@ RSpec.describe Matsuri::Transform::Env do
     end
   end
 
+  describe '.merge_env' do
+    it 'returns the identity for an empty array' do
+      expect(env.merge_env([])).to eq({})
+    end
+
+    it 'folds left to right, later maps winning on collision' do
+      expect(env.merge_env([{ 'A' => '1', 'B' => '1' }, { 'B' => '2' }])).to \
+        eq('A' => '1', 'B' => '2')
+    end
+
+    it 'folds nil entries as the identity' do
+      expect(env.merge_env([{ 'A' => '1' }, nil, { 'B' => '2' }])).to \
+        eq('A' => '1', 'B' => '2')
+    end
+  end
+
   describe '.env_to_map' do
     it 'keys entries by name and carries valueFrom intact' do
       mapped = env.env_to_map(entries)

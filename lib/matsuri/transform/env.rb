@@ -10,6 +10,14 @@ module Matsuri
     module Env
       extend self
 
+      # Folds an array of env maps into one under hash merge. Merge is
+      # the monoid here: {} is the identity, later maps win on key
+      # collision, and nil entries fold as the identity so conditional
+      # contributions can decline by returning nil.
+      def merge_env(envs)
+        envs.compact.reduce({}, :merge)
+      end
+
       def update_kv(kv, key, value)
         updated_kv = env_to_map(kv).update(key, value)
         expand_env(updated_kv)
