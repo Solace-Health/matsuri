@@ -5,8 +5,9 @@ require 'spec_helper'
 # Bulkhead deployments over one shared podspec, parameterized through lazy
 # options on two axes: app_role (web, worker) names the workload,
 # resource_class (standard, streams, general) names the capacity class.
-# The pod resolves class defaults from its table; every scalar remains an
-# independent override point.
+# The pod resolves class defaults from its table; resource scalars remain
+# independent override points through the ResourceParams concern pair
+# (laws in resource_params_spec).
 RSpec.describe 'bulkhead deployments over a shared podspec' do
   let(:web)     { JSON.parse(Matsuri::Registry.deployment('app-web').new.to_json) }
   let(:streams) { JSON.parse(Matsuri::Registry.deployment('app-web-streams').new.to_json) }
@@ -49,7 +50,7 @@ RSpec.describe 'bulkhead deployments over a shared podspec' do
 
   it 'lets a single scalar override beat the class default' do
     klass = Matsuri.define(:deployment, 'app-web-fat', inherits: 'app-web') do
-      let(:pod_options) { default_pod_options.merge(app_role: 'web', mem_limit: '4Gi') }
+      let(:mem_limit) { '4Gi' }
     end
     rendered = JSON.parse(klass.new.to_json)
 

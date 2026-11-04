@@ -1,10 +1,12 @@
 # One podspec shared by every bulkhead. Identity is two axes passed by
 # the owning deployment: app_role (web, worker) names the workload,
 # resource_class (standard, streams, general) names the capacity class.
-# The class table supplies scalar defaults; each scalar stays its own
-# override point, so a deployment can name a class and still tune one
-# leaf.
+# The class table supplies the resource defaults behind
+# Concerns::Pods::ResourceParams, so a deployment can name a class and
+# still tune one leaf through the resource channel.
 Matsuri.define :pod, 'app' do
+  include Matsuri::Concerns::Pods::ResourceParams
+
   let(:app_role)       { options[:app_role] }
   let(:resource_class) { options[:resource_class] || 'standard' }
 
@@ -19,10 +21,10 @@ Matsuri.define :pod, 'app' do
   end
   let(:resource_class_defaults) { resource_classes.fetch(resource_class) }
 
-  let(:cpu_request) { options[:cpu_request] || resource_class_defaults[:cpu_request] }
-  let(:mem_request) { options[:mem_request] || resource_class_defaults[:mem_request] }
-  let(:cpu_limit)   { options[:cpu_limit]   || resource_class_defaults[:cpu_limit] }
-  let(:mem_limit)   { options[:mem_limit]   || resource_class_defaults[:mem_limit] }
+  let(:default_cpu_request) { resource_class_defaults[:cpu_request] }
+  let(:default_mem_request) { resource_class_defaults[:mem_request] }
+  let(:default_cpu_limit)   { resource_class_defaults[:cpu_limit] }
+  let(:default_mem_limit)   { resource_class_defaults[:mem_limit] }
 
   let(:volumes) { [] }
 
