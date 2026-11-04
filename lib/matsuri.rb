@@ -99,8 +99,13 @@ module Matsuri
     autoload :PodTemplate,        'matsuri/concerns/pod_template'
 
     module Pods
+      autoload :ResourceParams,   'matsuri/concerns/pods/resource_params'
       autoload :SpreadPods,       'matsuri/concerns/pods/spread_pods'
       autoload :SpreadTopology,   'matsuri/concerns/pods/spread_topology'
+    end
+
+    module Deployments
+      autoload :ResourceParams,   'matsuri/concerns/deployments/resource_params'
     end
   end
 
