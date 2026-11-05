@@ -3,6 +3,7 @@
 require 'map'
 require 'matsuri/core_ext'
 require 'matsuri/acceptors/image_tag'
+require 'matsuri/stack/scope'
 require 'rainbow/ext/string'
 require 'rlet'
 require 'rlet/lazy_options'
