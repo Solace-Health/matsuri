@@ -190,8 +190,10 @@ the shared document. Presenter declarations and save_config never cross.
 ## Scoped Presenters
 
 `present` declarations are scope properties: a declaration covers every
-member of its subtree, no matter where in the body it appears. Policy
-lives at the narrowest scope that covers everyone who shares it:
+member of its subtree, no matter where in the body it appears. By
+convention, declare presenters after the members they cover, separated
+by a blank line. Policy lives at the narrowest scope that covers
+everyone who shares it:
 
 ```ruby
 Matsuri.define :stack, 'app' do
@@ -199,26 +201,120 @@ Matsuri.define :stack, 'app' do
     needs :config_map, 'app-settings'   # no pruning: empty values are payload
 
     parallel do
-      present :on_create, match_deployments(seed_replicas(2))
-      present :on_create, prune_empty
-      present :on_apply,  prune_empty
       needs :deployment, 'app-web'
       needs :deployment, 'app-worker-general'
+
+      present :on_create, seed_replicas(2)
+      present :on_create, prune_empty
+      present :on_apply,  prune_empty
     end
   end
 end
 ```
 
+Members read the same binding, so one config flag can swap who owns the
+replica count — the member list changes in the stack, and the field
+changes in the definition. Enabled, the autoscaler joins the scope and
+the deployment renders no count: `prune_empty` keeps the `nil` out of
+both payloads, the server defaults the field unowned, and the
+autoscaler takes it from its first reconcile. Disabled, the definition
+declares the standing count and matsuri owns it — drift gets corrected
+on every apply:
+
+```ruby
+# platform/deployments/app-web.rb
+Matsuri.define :deployment, 'app-web' do
+  let(:apply_via) { :server_side_apply }
+  let(:replicas)  { stack_config&.enable_hpa? ? nil : 2 }
+  ...
+end
+
+# platform/stacks/app.rb
+Matsuri.define :stack, 'app' do
+  sequence do
+    needs :config_map, 'app-settings'
+
+    parallel do
+      needs :deployment, 'app-web'
+      needs :deployment, 'app-worker-general'
+      needs :hpa,        'app-web' if stack_config.enable_hpa?
+
+      present :on_create, prune_empty
+      present :on_apply,  prune_empty
+    end
+  end
+end
+```
+
+`enable_hpa?` is a declared read on the stack's acceptor, defaulting
+false — an unconfigured stack gets the fixed count. The safe navigation
+is what keeps the deployment independently addressable: constructed
+outside any stack there is no acceptor at all, `stack_config` is nil,
+and the definition lands on the same floor an unconfigured stack gets.
+A definition that reads `stack_config` without guarding has coupled
+itself to stack delivery. Note the division of labor with seeds: a definition-declared count is a standing promise
+matsuri keeps enforcing, while `seed_replicas` sets a birth size and
+cedes. Under the autoscaler the deployment above is born at the
+server's default of one; if it should be born larger, that is the
+seed's job — `present :on_create, seed_replicas(2)` composes with
+everything here unchanged.
+
 At each member, frames apply innermost-first — within a scope,
 declaration order; across scopes, the enclosing scope runs after the
 enclosed one, so an outer declaration sees, and may normalize, whatever
-the inner ones produced. To cover just a few members of a parallel
-block, wrap them in their own parallel block and declare there: grouping
-members this way never changes delivery order, so a scope can exist
-purely to carry presenters.
+the inner ones produced.
+
+To cover just some members of a parallel block, wrap them in their own
+parallel block and declare there — grouping members this way never
+changes delivery order, so a scope can exist purely to carry
+presenters. This is usually better than filtering by kind: here the
+seeds and pruning belong to the deployments, and the services stay
+untouched without any `match_deployments` wrapper, because position in
+the tree already selects them:
+
+```ruby
+Matsuri.define :stack, 'app' do
+  sequence do
+    needs :config_map, 'app-settings'
+
+    parallel do
+      parallel do
+        needs :deployment, 'app-web'
+        needs :deployment, 'app-worker-general'
+
+        present :on_create, seed_replicas(2)
+        present :on_create, prune_empty
+        present :on_apply,  prune_empty
+      end
+
+      parallel do
+        needs :service, 'app-web'
+      end
+    end
+  end
+end
+```
+
+A presenter the deployments and services genuinely share would move up
+to the enclosing parallel block — one declaration, both subtrees
+covered, and each inner scope keeps only what is uniquely its own.
 
 `save_config` is also a scope property, resolving to the nearest
-declaring scope; a resource's own `let(:save_config)` still outranks it.
+declaring scope; a resource's own `let(:save_config)` still outranks it:
+
+```ruby
+sequence do
+  needs :deployment, 'app-web'
+
+  save_config false
+
+  parallel do
+    needs :config_map, 'app-settings'   # nearest scope wins: true again
+
+    save_config true
+  end
+end
+```
 
 ## Server Side Apply
 
