@@ -38,6 +38,8 @@ module Matsuri
 
       desc 'stack STACK_NAME', 'show manifests for all stack members'
       option :stack_config, type: :string, banner: 'PATH'
+      option :create, type: :boolean, default: false, desc: 'present members through the :on_create pipeline (the payload a create delivers)'
+      option :apply,  type: :boolean, default: false, desc: 'present members through the :on_apply pipeline (the payload ongoing delivery sends)'
       def stack(name = :not_specified)
         with_config do |opt|
           Matsuri::Registry.stack(name).new(config: stack_config_data(opt)).show!(opt)

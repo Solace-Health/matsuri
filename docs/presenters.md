@@ -184,6 +184,11 @@ contesting a declaration. The model:
   nothing to say about them — an HPA that scales is never fought. The
   cluster side of this is pinned by `tests/bin/probe-save-config.sh`.
 
+Both payloads are inspectable offline: `show stack NAME --create` and
+`--apply` present every member through that scenario's pipeline — the
+same assembly path the delivery verbs use, printed rather than sent.
+Pass both flags to read the regimes side by side, labeled per member.
+
 This is matsuri's whole answer to externally-owned fields — there is no
 read-back. Matsuri never reads live cluster state to make a declaration
 decision: a field someone else rolls (an image tag updated by a deploy

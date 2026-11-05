@@ -99,6 +99,10 @@ Every later apply is an ordinary server-side apply. `save_config` is
 pinned false under this mode — a seeded last-applied is a prune trap for
 any later client-side apply — so there is nothing to configure.
 
+To read what the protocol will send before running it,
+`show stack app --create --apply` prints both payloads per member,
+assembled by the same path, offline.
+
 The protocol and its refuted alternatives are pinned by
 `tests/bin/probe-ssa.sh`.
 

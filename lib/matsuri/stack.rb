@@ -104,8 +104,27 @@ module Matsuri
     end
 
     # Renders every member manifest as one kubectl-compatible YAML stream.
-    def show!(_opt = {})
-      members.each { |member| puts member.to_yaml }
+    # --create / --apply present each member through that scenario's
+    # pipeline instead: the payload the delivery verbs would send,
+    # assembled by the same path (KubectlOps), printed rather than sent.
+    # Both flags print both regimes per member, labeled.
+    def show!(opt = {})
+      scenarios = []
+      scenarios << :on_create if opt[:create]
+      scenarios << :on_apply  if opt[:apply]
+      return members.each { |member| puts member.to_yaml } if scenarios.empty?
+
+      ops = Matsuri::Tasks::KubectlOps
+      members.each do |member|
+        scenarios.each do |scenario|
+          # :on_apply starts from the applied manifest and :on_create from
+          # the full manifest, mirroring apply_payload and the seeded
+          # create respectively.
+          manifest = scenario == :on_apply ? member.applied_manifest_for_export : member.manifest_for_export
+          puts "# #{ops.description_for(member)} #{scenario}"
+          puts ops.serialize(ops.presentation(manifest, ops.presenters_for(member, stack_presenters), scenario))
+        end
+      end
     end
 
     def diff!(opt = {})
