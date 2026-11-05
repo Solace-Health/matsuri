@@ -23,7 +23,7 @@ module Matsuri
 
       let(:selector) { { matchLabels: match_labels, matchExpressions: match_expressions } }
 
-      # Supplied by the owning stack through dep_options, or by the CLI
+      # Supplied by the owning stack through member options, or by the CLI
       # positional; pod templates read it.
       let(:image_tag) { options[:image_tag] }
 

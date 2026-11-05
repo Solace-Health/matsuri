@@ -3,10 +3,11 @@
 require 'map'
 require 'matsuri/core_ext'
 require 'matsuri/acceptors/image_tag'
-require 'matsuri/stack/scope'
 require 'rainbow/ext/string'
 require 'rlet'
 require 'rlet/lazy_options'
+require 'matsuri/stack/scope'
+require 'matsuri/stack/executor'
 
 module Matsuri
   class Stack
@@ -15,17 +16,8 @@ module Matsuri
     include Matsuri::Concerns::RegistryHelpers
     include Matsuri::Concerns::Awaiting
 
-    class_attribute :build_order
     class_attribute :acceptors
-    class_attribute :presenters
-
-    class_attribute :save_config_policy
-
-    # Declaration-surface vocabulary: match / match_kind / match_deployments
-    # wrap a present member so it applies selectively; seed_* constructors
-    # close a seed concern's hole over a declaration-time value.
-    extend Matsuri::Transform::Combinators::Helpers
-    extend Matsuri::Presenters::Helpers
+    class_attribute :scope_blocks
 
     # The collection name is the options key: each acceptor admits its own
     # component of the invocation options, whole. The built-in :image_tag
@@ -35,30 +27,34 @@ module Matsuri
     let(:image_tag)    { accepted(:image_tag).image_tag }
     let(:stack_config) { accepted(:config) }
 
-    # Defines a list of deps, used to  to idempotently converge Kubernetes
-    # resources. Generally, you will add a stack as a dep for resources you are
-    # sharing with other stacks, while directly referencing Kubernetes resources
-    # for things this stack is directly responsible for.
+    # Members are declared in a scope tree, evaluated per instance with
+    # the accepted payload in hand — plain Ruby is the conditional
+    # vocabulary. scope opens the root (a sequence); sequence is the
+    # everyday alias. Declarations accumulate: a later scope block, or a
+    # subclass's, appends to the same root in declaration order.
     #
-    # Examples:
-    # needs :stack,   'postgresql-95'
-    # needs :stack,   'redis-28'
-    # needs :stack,      'load-balancer'
-    # needs :deployment, 'rails-app-worker'
-    # needs :deployment, 'rails-app'
-    # needs :service,    'rails-app'
+    # Example:
     #
-    # Hooks:
-    #   check_only: when set to true, do not create or apply resource. Only check for it's presence
-    #   on_failure: a symbol of a method to call when check fails.
+    # Matsuri.define :stack, 'app' do
+    #   sequence do
+    #     needs :config_map, 'app-settings'
+    #     parallel do
+    #       present :on_apply, prune_empty
+    #       needs :deployment, 'app-web'
+    #       needs :deployment, 'app-worker' if stack_config.workers_enabled?
+    #     end
+    #     needs :service, 'app-web'
+    #   end
+    # end
     #
-    # @TODO Consider making this lazy-loaded. We don't need to generate this elaborate data structure
-    # unless we are converging. (But it might not really make things that much slower).
+    # Member hooks ride needs unchanged:
+    #   check_only: when true, only check for the resource's presence.
+    #   on_failure: a symbol of a stack method to call when a check fails.
     class << self
-      def needs(type, name, on_failure: nil, check_only: false)
-        self.build_order ||= []
-        self.build_order << [type.to_sym, name.to_s, { on_failure: on_failure, check_only: check_only }]
+      def scope(&block)
+        self.scope_blocks = Array(scope_blocks) + [block]
       end
+      alias_method :sequence, :scope
 
       def config_file(path)
         File.join(Matsuri::Config.config_path, path)
@@ -69,33 +65,24 @@ module Matsuri
       def accept(collection, acceptor)
         self.acceptors = (acceptors || {}).merge(collection.to_sym => acceptor)
       end
-
-      # Appends transform members to a scenario's pipeline. Unlike accept,
-      # where a collection names a slot and last declaration wins, a
-      # scenario accumulates: declaration order is member order. Members
-      # are presenter names, presenter classes, Callables, or anything
-      # #call-able; scenarios are intent regimes (:on_create brings into
-      # existence, :on_apply delivers to something existing) and each
-      # delivery verb assembles its own.
-      def present(scenario, *steps)
-        key = scenario.to_sym
-        current = presenters || {}
-        self.presenters = current.merge(key => Array(current[key]) + steps)
-      end
-
-      # Declares the save-config policy for every resource member this
-      # stack delivers (overriding the repo-wide Platform setting); a
-      # resource overrides again with its own let(:save_config). Normal
-      # apply path only.
-      def save_config(value)
-        self.save_config_policy = value
-      end
     end
 
     accept :image_tag, Matsuri::Acceptors::ImageTag
     # Empty acceptor: the collection is total, its surface is empty until
     # a platform re-declares it.
     accept :config, Matsuri::Acceptor
+
+    # The instance's member tree: the root scope (a sequence), assembled
+    # once per instance by evaluating the declared blocks in order with
+    # the accepted payload as the cascade. Instance identity is the
+    # (stack, options) pair, so the tree is too.
+    def root
+      @root ||= Scope.new(kind:    :sequence,
+                          options: { stack_config: stack_config, image_tag: image_tag },
+                          source:  self.class.scope_blocks&.first&.source_location&.join(':')).tap do |scope|
+        Array(self.class.scope_blocks).each { |block| scope.instance_eval(&block) }
+      end
+    end
 
     # Override this. This commands defines how to display the status
     # Maybe we can find some useful, standardized way of displaying
@@ -104,41 +91,12 @@ module Matsuri
       fail NoMethodError, 'Must implement #status!'
     end
 
-    # Renders every member manifest as one kubectl-compatible YAML stream.
-    # --create / --apply present each member through that scenario's
-    # pipeline instead: the payload the delivery verbs would send,
-    # assembled by the same path (KubectlOps), printed rather than sent.
-    # Both flags print both regimes per member, labeled.
     def show!(opt = {})
-      scenarios = []
-      scenarios << :on_create if opt[:create]
-      scenarios << :on_apply  if opt[:apply]
-      return members.each { |member| puts member.to_yaml } if scenarios.empty?
-
-      ops = Matsuri::Tasks::KubectlOps
-      members.each do |member|
-        scenarios.each do |scenario|
-          # :on_apply starts from the applied manifest and :on_create from
-          # the full manifest, mirroring apply_payload and the seeded
-          # create respectively.
-          manifest = scenario == :on_apply ? member.applied_manifest_for_export : member.manifest_for_export
-          puts "# #{ops.description_for(member)} #{scenario}"
-          puts ops.serialize(ops.presentation(manifest, ops.presenters_for(member, stack_presenters), scenario))
-        end
-      end
+      Executor.new(self).show!(opt)
     end
 
     def diff!(opt = {})
-      members.each do |member|
-        # --primary-container is a HashDiff-only projection, so it
-        # implies --hash-diff
-        if opt[:hash_diff] || opt[:primary_container]
-          Matsuri::Tasks::HashDiff.new(resource: member, primary_container: opt[:primary_container],
-                                       presenters: stack_presenters).run!
-        else
-          Matsuri::Tasks::KubectlOps.diff(member, presenters: stack_presenters)
-        end
-      end
+      Executor.new(self).diff!(opt)
     end
 
     # Override this. This command defines how all the stack depenencies
@@ -149,16 +107,7 @@ module Matsuri
 
     # Override this. This command defines how all stack dependencies are stopped
     def delete!
-      self.class.build_order.each do |(type, name)|
-        if type == :stack
-          puts "Skipping stack #{name}"
-          next
-        end
-
-        # Same options as converge, so a member whose identity derives from
-        # an accepted value addresses the same resource it created.
-        Matsuri::Tasks::KubectlOps.delete(dep(type, name).new(dep_options(type)))
-      end
+      Executor.new(self).delete!
     end
 
     def recreate!
@@ -172,34 +121,11 @@ module Matsuri
     end
 
     def converge!(opts = {})
-      puts "Converging #{name}".color(:red).bright if config.verbose
-      self.class.build_order.each do |(type, name, options)|
-        case type
-        when :file
-          Matsuri.log :info, "Checking for required file #{name}"
-          next if File.file?(name)
-          Matsuri.log(:fatal, "Cannot find required file #{name}") unless options[:on_failure]
-          send(options[:on_failure], type, name) if options[:on_failure]
-        when :task
-          Matsuri.log :info, "Executing task #{name}"
-          send(name, opts)
-          next
-        end
+      Executor.new(self).converge!(opts)
+    end
 
-        resource = dep(type, name).new(dep_options(type))
-        # @TODO if-elsif-end ladder code smell, refactor
-        if options[:check_only]
-          next if Matsuri::Tasks::KubectlOps.exists?(resource)
-          send(options[:on_failure], type, name) || Matsuri.log(:fatal, "#{type}/#{name} not found on cluster")
-        elsif type == :stack && !opts[:reboot]
-          puts "Shallow converging stack #{name}".color(:red).bright if config.verbose
-          resource.converge!
-        elsif type == :stack
-          resource.converge!(opts)
-        else
-          Matsuri::Tasks::KubectlOps.converge(resource, opts, presenters: stack_presenters)
-        end
-      end
+    def members
+      Executor.new(self).members
     end
 
     # Hooks
@@ -235,37 +161,6 @@ module Matsuri
     end
 
     # Helper functions
-    # Like stack-config, present declarations never cross a stack boundary:
-    # a nested stack assembles from its own class.
-    def stack_presenters
-      self.class.presenters || {}
-    end
-
-    # stack-config never crosses a stack boundary: instance identity is the
-    # (stack, stack-config) pair, and a nested stack is a different instance.
-    # The save-config policy rides to resource members only — a nested
-    # stack declares its own.
-    def dep_options(type)
-      return { image_tag: image_tag } if type == :stack
-
-      opts = { image_tag: image_tag, stack_config: stack_config }
-      opts[:save_config] = self.class.save_config_policy unless self.class.save_config_policy.nil?
-      opts
-    end
-
-    def members
-      self.class.build_order.filter_map do |(type, name, _)|
-        next if type == :file || type == :task
-
-        if type == :stack
-          puts "Skipping stack #{name}"
-          next
-        end
-
-        dep(type, name).new(dep_options(type))
-      end
-    end
-
     def accepted(collection)
       @accepted ||= {}
       @accepted[collection] ||= acceptor_class_for(self.class.acceptors.fetch(collection)).new(options[collection])

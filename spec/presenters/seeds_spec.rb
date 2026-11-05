@@ -75,15 +75,19 @@ RSpec.describe 'seed presenters' do
         let(:replicas) { nil }
       end
       stack = Matsuri.define(:stack, 'seed-boot') do
-        needs :deployment, 'seed-target'
-        present :on_create, match_deployments(seed_replicas(2))
+        sequence do
+          needs :deployment, 'seed-target'
+          present :on_create, match_deployments(seed_replicas(2))
+        end
       end
 
-      member = stack.new.members.first
+      instance = stack.new
+      member   = instance.members.first
+      frames   = instance.root.presenters
       expect(ops.payload(member.manifest_for_export,
-                         ops.presenters_for(member, stack.presenters), :on_create))
+                         ops.presenters_for(member, frames), :on_create))
         .to match(/replicas: 2/)
-      expect(ops.apply_payload(member, stack.presenters)).not_to match(/replicas/)
+      expect(ops.apply_payload(member, frames)).not_to match(/replicas/)
     end
   end
 end
