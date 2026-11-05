@@ -18,7 +18,10 @@ module Matsuri
     # entries don't need each other, which licenses any delivery order —
     # including the sequential one used here. Batching parallel delivery
     # into one apply stream is an executor-only change; no declaration
-    # would move.
+    # would move. Formally, parallel composition is commutative and
+    # associative: siblings may deliver in any order, and nested parallel
+    # scopes flatten without change of meaning — which is also what makes
+    # a scope introduced purely to carry presenters execution-neutral.
     #
     # A nested stack is an opaque arm: fresh executor, fresh frames. The
     # raw invocation payload crosses the boundary and the child re-accepts

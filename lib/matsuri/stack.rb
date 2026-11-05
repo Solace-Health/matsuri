@@ -59,8 +59,9 @@ module Matsuri
       # The root is a sequence by construction: scope blocks accumulate —
       # a later block, or a subclass's, composes after the earlier ones —
       # and "after" is a sequential notion. A parallel root would make
-      # that composition ambiguous. An unordered stack nests instead; a
-      # sequence of one element is that element.
+      # that composition ambiguous. An unordered stack nests instead.
+      # Formally, a sequence of one element is that element, so the
+      # nesting costs nothing.
       def parallel(&_block)
         fail ArgumentError,
              "a stack's root is a sequence; for an unordered stack, open scope do parallel do ... end end"

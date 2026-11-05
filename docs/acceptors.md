@@ -2,7 +2,8 @@
 
 An acceptor maps the information from a different bounded context into
 the bounded context of Matsuri -- K8S resources and Matsuri abstractions
-such as `stacks`.
+such as `stacks`. The constraints behind this are in
+[docs/design/acceptors.md](design/acceptors.md).
 
 The promises:
 

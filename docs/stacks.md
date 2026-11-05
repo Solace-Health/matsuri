@@ -1,6 +1,10 @@
 # Stacks
 
-Stacks are groupings of resources that are managed together.
+Stacks are groupings of resources that are managed together. The
+constraints behind what a stack is and what membership means are in
+[docs/design/stacks.md](design/stacks.md); the constraints behind the
+scope tree and its ordering promises are in
+[docs/design/stack-scope.md](design/stack-scope.md).
 
 ## Defining Stacks
 
@@ -62,9 +66,11 @@ was created first is deleted last.
 
 The root is always a sequence; `parallel` as a root fails at definition
 load. Scope blocks accumulate — a later block, or a subclass's, composes
-after the earlier ones — and "after" is a sequential notion, so a
-parallel root would make that composition ambiguous. An unordered stack
-loses nothing by nesting: a sequence of one element is that element.
+after the earlier ones — and "after" only means something in a sequence,
+so a parallel root would leave no place for later declarations to land.
+An unordered stack nests instead, at no cost: a sequence whose only
+member is a parallel block delivers exactly what the parallel block
+delivers.
 
 ```ruby
 Matsuri.define :stack, 'app' do
@@ -206,9 +212,10 @@ end
 At each member, frames apply innermost-first — within a scope,
 declaration order; across scopes, the enclosing scope runs after the
 enclosed one, so an outer declaration sees, and may normalize, whatever
-the inner ones produced. A scope introduced purely to carry presenters
-is free: nesting `parallel` inside `parallel` (or `sequence` inside
-`sequence`) changes nothing about delivery order.
+the inner ones produced. To cover just a few members of a parallel
+block, wrap them in their own parallel block and declare there: grouping
+members this way never changes delivery order, so a scope can exist
+purely to carry presenters.
 
 `save_config` is also a scope property, resolving to the nearest
 declaring scope; a resource's own `let(:save_config)` still outranks it.
