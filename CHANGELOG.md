@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking
 
 - **Stack members are declared in a scope tree.** `scope` (alias
-  `sequence`) opens the root; `needs` and `present` are callable only
-  inside a scope, and the class-level `needs`, `present`, and
-  `save_config` macros are removed along with `build_order`. The
+  `sequence`) opens the root — the root is always a sequence, and
+  `parallel` at the root fails at definition load with the nested
+  spelling; `needs` and `present` are callable only inside a scope, and
+  the class-level `needs`, `present`, and `save_config` macros are
+  removed along with `build_order`. The
   migration for a flat stack is one wrapper:
 
   ```ruby

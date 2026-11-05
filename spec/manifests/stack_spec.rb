@@ -180,4 +180,12 @@ RSpec.describe 'app stack' do
     expect(Matsuri::Stack).not_to respond_to(:present)
     expect(Matsuri::Stack).not_to respond_to(:save_config)
   end
+
+  it 'refuses a parallel root, naming the nested spelling' do
+    expect {
+      Matsuri.define(:stack, 'app-parallel-root') do
+        parallel { needs :deployment, 'app-web' }
+      end
+    }.to raise_error(ArgumentError, /root is a sequence.*parallel do/)
+  end
 end

@@ -60,6 +60,23 @@ apply is a delivery detail, never a declaration change.
 Deletion unwinds the tree in reverse: sequences back-to-front, so what
 was created first is deleted last.
 
+The root is always a sequence; `parallel` as a root fails at definition
+load. Scope blocks accumulate — a later block, or a subclass's, composes
+after the earlier ones — and "after" is a sequential notion, so a
+parallel root would make that composition ambiguous. An unordered stack
+loses nothing by nesting: a sequence of one element is that element.
+
+```ruby
+Matsuri.define :stack, 'app' do
+  scope do
+    parallel do
+      needs :deployment, 'app-web'
+      needs :deployment, 'app-worker-general'
+    end
+  end
+end
+```
+
 ## Conditionals
 
 The tree assembles per stack instance, with the accepted payload in
