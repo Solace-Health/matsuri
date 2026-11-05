@@ -51,18 +51,20 @@ ownership claim over a field the definition does not manage.
 
 So a server-side resource's payloads declare in persistence normal form:
 declare `prune_empty` on both intent regimes, after any seeds, on the
-stack (or the resource):
+scope carrying the server-side members (or on the resource):
 
 ```ruby
 Matsuri.define :stack, 'app' do
-  needs :deployment, 'app-web'
-  needs :service,    'app-web'
+  sequence do
+    needs :deployment, 'app-web'
+    needs :service,    'app-web'
 
-  present :on_create, match_deployments(seed_replicas(2))
-  present :on_create, match_deployments(seed_image('registry.example.com/app:boot'))
+    present :on_create, match_deployments(seed_replicas(2))
+    present :on_create, match_deployments(seed_image('registry.example.com/app:boot'))
 
-  present :on_create, prune_empty
-  present :on_apply,  prune_empty
+    present :on_create, prune_empty
+    present :on_apply,  prune_empty
+  end
 end
 ```
 

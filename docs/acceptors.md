@@ -123,7 +123,9 @@ Matsuri.define :stack, 'app' do
   accept :image_tag, 'pinned-image-tag'
   accept :config,    'app'
 
-  needs :deployment, 'app-web'
+  sequence do
+    needs :deployment, 'app-web'
+  end
 end
 ```
 

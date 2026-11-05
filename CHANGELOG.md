@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- **Stack members are declared in a scope tree.** `scope` (alias
+  `sequence`) opens the root; `needs` and `present` are callable only
+  inside a scope, and the class-level `needs`, `present`, and
+  `save_config` macros are removed along with `build_order`. The
+  migration for a flat stack is one wrapper:
+
+  ```ruby
+  Matsuri.define :stack, 'app' do
+    sequence do
+      needs :config_map, 'app-settings'
+      needs :deployment, 'app-web'
+    end
+  end
+  ```
+
+  Scope bodies evaluate per stack instance with the accepted payload in
+  hand, so plain Ruby is the conditional vocabulary — `needs ... if
+  stack_config.batch_enabled?`, enumeration from config — and seed
+  constructors may close over instance values, which class-level
+  declarations never could. Scopes nest: `sequence` members need the
+  ones before them, `parallel` members don't need each other (delivered
+  sequentially today; the declaration licenses any order). The cascade
+  (`stack_config`, `image_tag`) re-anchors per subtree through opening
+  options (`parallel stack_config: stack_config.workers do ... end`),
+  and a scope body may declare node-local memoized `let` values,
+  invisible to sibling and child scopes. Multiple scope blocks,
+  including a subclass's, append to the same root in declaration order —
+  and subclass declarations no longer mutate the parent's member list.
+- **`present` declarations are scope properties.** A declaration covers
+  its scope's whole subtree regardless of position in the body; at each
+  member, frames apply innermost-first, so enclosing scopes normalize
+  last. `save_config` is likewise a scope property resolving to the
+  nearest declaring scope; a resource's own let still outranks it.
+  `Stack#stack_presenters` and `Stack#dep_options` are removed — the
+  executor assembles per-member context from the walk.
+- **The raw stack-config artifact now crosses a nested-stack boundary.**
+  The child re-accepts it through its own acceptor, reading its own
+  vocabulary off the shared document; the parent's acceptance, presenter
+  frames, and save_config still never cross. Previously nothing but the
+  image tag crossed.
+- **`delete!` unwinds in reverse declaration order** (sequences
+  back-to-front), instead of the forward order the flat list used.
+
 ### Added
 
 - `Matsuri::Transform::Env.merge_env` folds an array of env maps into

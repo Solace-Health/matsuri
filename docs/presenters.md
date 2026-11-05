@@ -48,24 +48,34 @@ requirement: any subclass of `Matsuri::Presenter` works, and anything
 
 ## Declaring Pipelines on Stacks
 
-A stack declares its pipelines with `present`. Unlike `accept`, where a
-collection names a slot and the last declaration wins, a scenario
-accumulates: each `present` appends, and declaration order is member
-order.
+A stack declares its pipelines with `present`, inside a scope of its
+member tree. Unlike `accept`, where a collection names a slot and the
+last declaration wins, a scenario accumulates: each `present` appends,
+and declaration order is pipeline order within the scope.
 
 ```ruby
 Matsuri.define :stack, 'app' do
-  needs :config_map, 'app-settings'
-  needs :deployment, 'app-web'
-  needs :service,    'app-web'
+  sequence do
+    needs :config_map, 'app-settings'
+    needs :deployment, 'app-web'
+    needs :service,    'app-web'
 
-  present :on_apply,  match_deployments('fluentd-sidecar')
-  present :on_create, 'team-label'
+    present :on_apply,  match_deployments('fluentd-sidecar')
+    present :on_create, 'team-label'
+  end
 end
 ```
 
 Members may be presenter registry names, presenter classes, `Callable`
 instances, or anything `#call`-able.
+
+A declaration is a scope property, not positional: it covers every
+member of the declaring scope's subtree, no matter where in the body it
+appears. At each member the frames apply innermost-first, so an
+enclosing scope's declarations run after — and may normalize — whatever
+the enclosed scopes produced. Policy therefore lives at the narrowest
+scope covering everyone who shares it; see
+[Scoped Presenters](stacks.md#scoped-presenters).
 
 ### Scenarios Are Intent Regimes
 
@@ -86,7 +96,9 @@ assembles `:on_apply` and the preview extends through presenters for
 free.
 
 Declarations never cross a stack boundary: a nested stack assembles from
-its own declarations, the same rule stack-config follows.
+its own tree. Stack-config differs here — its raw artifact does cross,
+re-accepted by the child's own acceptor — but the acceptance, like the
+presenter frames, stays home.
 
 ## Declaring on Resources
 
@@ -234,22 +246,25 @@ argument:
 
 ```ruby
 Matsuri.define :stack, 'app' do
-  needs :deployment, 'app-web'
-  needs :deployment, 'app-worker'
+  sequence do
+    needs :deployment, 'app-web'
+    needs :deployment, 'app-worker'
 
-  present :on_create, match_deployments(seed_replicas(2))
-  present :on_create, match_deployments(seed_resources(
-    requests: { cpu: '500m', memory: '512Mi' }
-  ))
-  present :on_create, match({ kind: 'Deployment', name: 'app-worker' },
-                            seed_replicas(1))
+    present :on_create, match_deployments(seed_replicas(2))
+    present :on_create, match_deployments(seed_resources(
+      requests: { cpu: '500m', memory: '512Mi' }
+    ))
+    present :on_create, match({ kind: 'Deployment', name: 'app-worker' },
+                              seed_replicas(1))
+  end
 end
 ```
 
-Seed values close at declaration time, so they must be literals or reads
-of global state (`Matsuri::Platform`, environment config) — instance
-values like the converge positional do not reach class-level
-declarations.
+Seed values close at declaration time. Scope bodies evaluate per stack
+instance with the accepted payload in hand, so a seed may close over
+literals, global state (`Matsuri::Platform`, environment config), or
+instance values — `seed_replicas(stack_config.boot_replicas)` is an
+ordinary declaration.
 
 ### save_config
 
@@ -258,10 +273,10 @@ only when ongoing delivery consults last-applied (`apply_via :apply`):
 under `:replace` or `:server_side_apply` it is pinned false, because a
 seeded last-applied is a prune trap for any later client-side apply. It
 resolves most-specific-first: a definition's own `let(:save_config)`,
-then the owning stack's `save_config false` declaration, then the
-repo-wide `Matsuri::Platform.save_config` (default `true`). Like
-stack-config and `present` declarations, a stack's policy never crosses
-to nested stacks.
+then the nearest scope declaring `save_config` on the walk down, then
+the repo-wide `Matsuri::Platform.save_config` (default `true`). Like
+`present` declarations and the stack-config acceptance, a scope's
+policy never crosses to nested stacks.
 
 ## Prune Empty
 
