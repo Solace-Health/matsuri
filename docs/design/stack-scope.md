@@ -54,8 +54,9 @@ element is that element.
 Properties, one per law:
 
 - Commutativity licenses every delivery strategy for a parallel scope —
-  sequential iteration (the current executor), one batched apply
-  stream, concurrent delivery — without any change of declaration.
+  sequential iteration, batched apply streams (the current executor:
+  members grouped by delivery mechanism, one kubectl invocation per
+  group), concurrent delivery — without any change of declaration.
   The DSL states the constraint; the executor owns the mechanism.
 - Associativity makes nested parallel-in-parallel (and
   sequence-in-sequence) flatten without change of meaning. A scope

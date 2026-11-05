@@ -57,9 +57,12 @@ end
 Order appears in the text only where order is a promise: the config map
 lands before anything reads it, the warmer runs after the workloads, and
 the workloads themselves carry no mutual order. Because parallel members
-don't need each other, matsuri may deliver them in any order — the
-current executor delivers them sequentially; batching them into one
-apply is a delivery detail, never a declaration change.
+don't need each other, matsuri may deliver them however it likes — on
+converge it batches the members sharing a delivery mechanism into one
+kubectl invocation, while members with their own protocols
+(recreate-policy, a server-side member's first create) deliver
+individually. Either way it is a delivery detail, never a declaration
+change.
 
 Deletion unwinds the tree in reverse: sequences back-to-front, so what
 was created first is deleted last.

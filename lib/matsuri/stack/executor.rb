@@ -14,14 +14,17 @@ module Matsuri
     # (stack_config, image_tag), so a re-anchored frame reaches the
     # members constructed under it.
     #
-    # Ordering semantics, this version: a parallel scope declares that its
-    # entries don't need each other, which licenses any delivery order —
-    # including the sequential one used here. Batching parallel delivery
-    # into one apply stream is an executor-only change; no declaration
-    # would move. Formally, parallel composition is commutative and
-    # associative: siblings may deliver in any order, and nested parallel
-    # scopes flatten without change of meaning — which is also what makes
-    # a scope introduced purely to carry presenters execution-neutral.
+    # Ordering semantics: a parallel scope declares that its entries
+    # don't need each other, which licenses any delivery order. Converge
+    # uses that freedom: a parallel scope's resource leaves gather into
+    # one batch, flushed at scope close through the delivery boundary,
+    # which groups them by mechanism (see KubectlOps.converge_batch).
+    # Non-resource entries and nested arms deliver as themselves — order
+    # among a parallel scope's entries is not a promise anyone may read.
+    # Formally, parallel composition is commutative and associative:
+    # siblings may deliver in any order, and nested parallel scopes
+    # flatten without change of meaning — which is also what makes a
+    # scope introduced purely to carry presenters execution-neutral.
     #
     # A nested stack is an opaque arm: fresh executor, fresh frames. The
     # raw invocation payload crosses the boundary and the child re-accepts
@@ -37,15 +40,7 @@ module Matsuri
 
       def converge!(opts = {})
         puts "Converging #{stack.name}".color(:red).bright if Matsuri::Config.verbose
-
-        walk(stack.root) do |entry, scope|
-          case entry.type
-          when :file  then converge_file(entry)
-          when :task  then converge_task(entry, opts)
-          when :stack then converge_stack(entry, opts)
-          else converge_resource(entry, scope, opts)
-          end
-        end
+        converge_scope(stack.root, opts)
       end
 
       # Reverse of the converge order: sequences unwind back-to-front;
@@ -102,6 +97,51 @@ module Matsuri
       end
 
       private
+
+      ### Converge walk
+
+      def converge_scope(scope, opts)
+        frames.push(scope)
+        scope.kind == :parallel ? converge_parallel(scope, opts) : converge_sequence(scope, opts)
+      ensure
+        frames.pop
+      end
+
+      def converge_sequence(scope, opts)
+        scope.entries.each do |entry|
+          entry.is_a?(Scope) ? converge_scope(entry, opts) : converge_entry(entry, scope, opts)
+        end
+      end
+
+      # Resource leaves gather into one batch for the delivery boundary;
+      # files, tasks, nested stacks, check-only entries, and nested arms
+      # deliver as themselves.
+      def converge_parallel(scope, opts)
+        batch = []
+        scope.entries.each do |entry|
+          if entry.is_a?(Scope)
+            converge_scope(entry, opts)
+          elsif batchable_entry?(entry)
+            batch << { resource: resource_for(entry, scope), presenters: effective_presenters }
+          else
+            converge_entry(entry, scope, opts)
+          end
+        end
+        Matsuri::Tasks::KubectlOps.converge_batch(batch, opts) unless batch.empty?
+      end
+
+      def batchable_entry?(entry)
+        !%i[file task stack].include?(entry.type) && !entry.options[:check_only]
+      end
+
+      def converge_entry(entry, scope, opts)
+        case entry.type
+        when :file  then converge_file(entry)
+        when :task  then converge_task(entry, opts)
+        when :stack then converge_stack(entry, opts)
+        else converge_resource(entry, scope, opts)
+        end
+      end
 
       ### Walk
 

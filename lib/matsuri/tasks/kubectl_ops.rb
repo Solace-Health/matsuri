@@ -162,6 +162,41 @@ module Matsuri
         end
       end
 
+      # Parallel delivery: members that share a mechanism ride one kubectl
+      # invocation. Partition first — recreate-policy members and
+      # server-side members not yet live have their own protocols and
+      # deliver through the ordinary verb — then group the rest by
+      # (task, namespace, field manager), which is the whole identity of
+      # an apply invocation. A group of one also routes through the
+      # ordinary verb, so batching is never observable below this
+      # boundary. Members arrive as { resource:, presenters: } pairs;
+      # each payload presents through its own pipeline before the
+      # streams concatenate.
+      def converge_batch(members, opts = {})
+        batchable, individual = members.partition { |member| batchable?(member.fetch(:resource)) }
+        individual.each { |member| converge(member.fetch(:resource), opts, presenters: member.fetch(:presenters)) }
+
+        batchable.group_by { |member| batch_key(member.fetch(:resource)) }.each do |(task, namespace, field_manager), group|
+          if group.length == 1
+            member = group.first
+            converge(member.fetch(:resource), opts, presenters: member.fetch(:presenters))
+          else
+            task.new(input:         group.map { |member| apply_payload(member.fetch(:resource), member.fetch(:presenters)) }.join(''),
+                     namespace:     namespace,
+                     description:   group.map { |member| description_for(member.fetch(:resource)) }.join(', '),
+                     field_manager: field_manager).run!
+          end
+        end
+      end
+
+      def batchable?(resource)
+        resource.converge_via != :recreate && !(server_side?(resource.apply_via) && !exists?(resource))
+      end
+
+      def batch_key(resource)
+        [apply_task_for(resource.apply_via), resource.namespace, resource.field_manager]
+      end
+
       def apply_payload(resource, presenters)
         payload(resource.applied_manifest_for_export, presenters_for(resource, presenters), :on_apply)
       end

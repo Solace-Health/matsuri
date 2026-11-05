@@ -31,8 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stack_config.batch_enabled?`, enumeration from config — and seed
   constructors may close over instance values, which class-level
   declarations never could. Scopes nest: `sequence` members need the
-  ones before them, `parallel` members don't need each other (delivered
-  sequentially today; the declaration licenses any order). The cascade
+  ones before them, `parallel` members don't need each other — converge
+  batches the ones sharing a delivery mechanism (task, namespace, field
+  manager) into one kubectl invocation, while recreate-policy members
+  and a server-side member's first create keep their own protocols; the
+  declaration licenses any delivery order. The cascade
   (`stack_config`, `image_tag`) re-anchors per subtree through opening
   options (`parallel stack_config: stack_config.workers do ... end`),
   and a scope body may declare node-local memoized `let` values,
