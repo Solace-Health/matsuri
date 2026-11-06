@@ -29,4 +29,17 @@ RSpec.describe 'app acceptor' do
     expect(accepted.instance_name).to eq 'app-feat'
     expect { accepted.expires_at }.to raise_error(NoMethodError)
   end
+
+  # Accepted transforms fold: a value that exists only in one regime
+  # answers nil outside it.
+  it 'folds regime-gated transforms with maybe' do
+    klass = Class.new(Matsuri::Acceptor) do
+      let(:artifact)    { options || {} }
+      let(:replicas?)   { !artifact[:replicas].nil? }
+      let(:replica_arg) { maybe(replicas?) { "--replicas=#{artifact[:replicas]}" } }
+    end
+
+    expect(klass.new(replicas: 3).replica_arg).to eq '--replicas=3'
+    expect(klass.new(nil).replica_arg).to be_nil
+  end
 end

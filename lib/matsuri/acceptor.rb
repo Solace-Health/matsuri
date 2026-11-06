@@ -20,6 +20,12 @@ module Matsuri
     include Let
     include RLet::LazyOptions
 
+    # Accepted transforms fold: a value that exists only in one regime
+    # answers nil outside it. Same idiom as the manifest layer's maybe.
+    def maybe(cond)
+      yield if cond
+    end
+
     class << self
       def load_path
         Matsuri::Config.acceptors_path

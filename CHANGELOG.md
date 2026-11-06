@@ -73,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one under hash merge: `{}` is the identity, later maps win on key
   collision, and nil entries fold as the identity. Replaces chained
   `.merge()` calls when assembling a container env from fragments.
+- **`Acceptor#maybe`** — the manifest layer's regime-folding idiom
+  (`maybe(cond) { value }`, nil outside the regime) is now available in
+  acceptors, where accepted transforms live.
 
 ## [0.3.0] - 2026-11-02
 
