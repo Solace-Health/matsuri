@@ -119,3 +119,11 @@ are predefined lets with conventional defaults.
 
 See also the deployment fixtures:
 [spec/fixture/platform/deployments](../spec/fixture/platform/deployments).
+
+## Useful Patterns
+
+These are patterns that have been useful.
+
+- [Flag Maps](patterns/flags.md) — container args (and other option
+  lists) as one indexed map of scalar lets: readable as an index,
+  reasoned one flag at a time, overridden monoidally.
