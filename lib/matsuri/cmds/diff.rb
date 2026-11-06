@@ -27,7 +27,7 @@ module Matsuri
       option :stack_config, type: :string, banner: 'PATH'
       def stack(name = :not_specified)
         with_config do |opt|
-          Matsuri::Registry.stack(name).new(config: stack_config_data(opt)).diff!(opt)
+          Matsuri::Registry.stack(name).new(config: stack_config_data(opt, name)).diff!(opt)
         end
       end
 

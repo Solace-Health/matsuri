@@ -42,7 +42,7 @@ module Matsuri
       option :apply,  type: :boolean, default: false, desc: 'present members through the :on_apply pipeline (the payload ongoing delivery sends)'
       def stack(name = :not_specified)
         with_config do |opt|
-          Matsuri::Registry.stack(name).new(config: stack_config_data(opt)).show!(opt)
+          Matsuri::Registry.stack(name).new(config: stack_config_data(opt, name)).show!(opt)
         end
       end
 

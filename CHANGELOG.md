@@ -59,6 +59,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Standing stack-config documents.** Without `--stack-config=`, the
+  CLI probes the environment's convention root for a standing document:
+  `<root>/<environment>/<stack>.yaml`, then `<root>/<environment>.yaml`.
+  The root is an environment property (`stack_config_root` on the
+  platform environment config, resolved against the repo root when
+  relative); no declaration means no convention layers. Resolution is a
+  selector over atomic documents — the first existing source wins whole,
+  layers never contribute keys to one another. The flag stays an
+  assertion: a bad path fails loudly, never falls back. Nothing resolved
+  is still the empty value, owned by the acceptor. See docs/stacks.md.
 - `Matsuri::Transform::Env.merge_env` folds an array of env maps into
   one under hash merge: `{}` is the identity, later maps win on key
   collision, and nil entries fold as the identity. Replaces chained

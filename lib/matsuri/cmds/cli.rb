@@ -56,7 +56,7 @@ module Matsuri
       def converge(name, image_tag = nil)
         with_config do |opt|
           Matsuri::Registry.stack(name)
-            .new(image_tag: image_tag, config: stack_config_data(opt))
+            .new(image_tag: image_tag, config: stack_config_data(opt, name))
             .converge!(opt)
         end
       end

@@ -171,9 +171,40 @@ The artifact rides in on the converge:
 
     matsuri <env> converge app --stack-config stack-config.yaml
 
-Without the flag, every read lands on the acceptor's defaults — the
-unconfigured stack behaves exactly as it did before the config surface
-existed.
+Without the flag, the CLI looks for a standing document under the
+environment's convention root. An environment that keeps static
+stack configs in the repo declares where:
+
+```ruby
+# config/platform.rb
+config_context :staging do
+  default(:kube_context)      { 'staging-cluster' }
+  default(:stack_config_root) { 'etc/stack-configs' }
+end
+```
+
+Resolution is a selector over atomic documents, ordered by specificity
+of claim — the first source that exists wins, whole:
+
+1. `--stack-config=PATH` — an assertion: a bad path fails loudly, never
+   falls back.
+2. `<root>/<environment>/<stack>.yaml` — the stack's own document for
+   this environment.
+3. `<root>/<environment>.yaml` — the environment's document, for
+   environments whose stacks share one schema.
+4. Nothing — the acceptor receives the empty value.
+
+No layer ever contributes keys to another: this is selection, not a
+merge cascade. A stack document does not patch the environment
+document; whichever document wins is the whole artifact. Combining —
+defaults for absent keys, config-fed values folded with derived ones —
+belongs inside the stack, where the acceptor and plain Ruby already own
+it. A relative root resolves against the repo root; an environment that
+declares no root has no convention layers.
+
+When nothing resolves, every read lands on the acceptor's defaults —
+the unconfigured stack behaves exactly as it did before the config
+surface existed.
 
 Inside the tree, the accepted binding cascades to every scope as
 `stack_config`. A scope can re-anchor the frame for its subtree through
